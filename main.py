@@ -214,6 +214,10 @@ def callback():
                     "공지 확인하기:\n"
                     f"{NOTICE_URL}"
                 ),
+                "!관리자": (
+                    "방장: 누구\n"
+                    "부방장: 누구, 누구, 누구"
+                ),
             }
 
             if text in commands:
