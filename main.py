@@ -1,7 +1,7 @@
 
 import os
 import requests
-from flask import Flask, request, abort, render_template_string
+from flask import Flask, abort, render_template_string
 
 app = Flask(__name__)
 
@@ -13,6 +13,8 @@ LINE_API_HEADERS = {
     "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
     "Content-Type": "application/json",
 }
+
+NOTICE_URL = "https://line-guide-bot.onrender.com/notice"
 
 # ==================================
 # 공지 내용: 나중에 이 부분만 수정
@@ -35,7 +37,7 @@ def home():
     return "LINE 안내봇 실행 중!"
 
 
-# 공지 전용 페이지
+# 공지 전용 웹페이지
 @app.route("/notice", methods=["GET"])
 def notice():
     return render_template_string("""
@@ -80,17 +82,23 @@ def notice():
 
 
 def reply_message(reply_token, text):
-    return requests.post(
-        "https://api.line.me/v2/bot/message/reply",
-        headers=LINE_API_HEADERS,
-        json={
-            "replyToken": reply_token,
-            "messages": [
-                {"type": "text", "text": text}
-            ],
-        },
-        timeout=10,
-    )
+    try:
+        response = requests.post(
+            "https://api.line.me/v2/bot/message/reply",
+            headers=LINE_API_HEADERS,
+            json={
+                "replyToken": reply_token,
+                "messages": [
+                    {"type": "text", "text": text}
+                ],
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+        return True
+    except requests.RequestException as error:
+        print(f"LINE 답장 전송 실패: {error}")
+        return False
 
 
 def get_display_name(user_id, group_id=None):
@@ -119,8 +127,8 @@ def get_display_name(user_id, group_id=None):
             return response.json().get(
                 "displayName", "신규 멤버"
             )
-    except requests.RequestException:
-        pass
+    except requests.RequestException as error:
+        print(f"프로필 조회 실패: {error}")
 
     return "신규 멤버"
 
@@ -163,7 +171,7 @@ def callback():
                 "오신 걸 환영합니다! 😊\n"
                 "먼저 공지 확인 부탁드립니다.\n\n"
                 "📢 공지 확인하기:\n"
-                "https://line-guide-bot.onrender.com/notice\n\n"
+                f"{NOTICE_URL}\n\n"
                 "공지 확인 후 자기소개와 사진을 "
                 "업로드해 주세요."
             )
@@ -178,14 +186,36 @@ def callback():
                 "신규 멤버 입장 시 환영 인사와 "
                 "공지 링크를 안내합니다.\n\n"
                 "📢 그룹 공지 확인하기:\n"
-                "https://line-guide-bot.onrender.com/notice\n\n"
+                f"{NOTICE_URL}\n\n"
                 "모두 즐겁게 이용해 주세요! 😊"
             )
 
             reply_message(reply_token, message)
             continue
 
-        # 일반 메시지에는 답장하지 않음
+        # 등록된 명령어에만 응답
+        if event_type == "message":
+            incoming = event.get("message", {})
+
+            if incoming.get("type") != "text":
+                continue
+
+            text = incoming.get("text", "").strip()
+
+            commands = {
+                "!방장": "165 55 10 경기광주",
+                "!규칙": (
+                    "📢 공지를 확인해 주세요!\n\n"
+                    "공지 확인하기:\n"
+                    f"{NOTICE_URL}"
+                ),
+            }
+
+            if text in commands:
+                reply_message(
+                    reply_token,
+                    commands[text]
+                )
 
     return "OK"
 
