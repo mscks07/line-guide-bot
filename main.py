@@ -1,7 +1,7 @@
 
 import os
 import requests
-from flask import Flask, abort, render_template_string
+from flask import Flask, request, abort, render_template_string
 
 app = Flask(__name__)
 
@@ -127,8 +127,13 @@ def get_display_name(user_id, group_id=None):
             return response.json().get(
                 "displayName", "신규 멤버"
             )
+
+        print(
+            f"프로필 조회 실패: "
+            f"{response.status_code} {response.text}"
+        )
     except requests.RequestException as error:
-        print(f"프로필 조회 실패: {error}")
+        print(f"프로필 조회 오류: {error}")
 
     return "신규 멤버"
 
