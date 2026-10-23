@@ -15,7 +15,7 @@ LINE_API_HEADERS = {
 }
 
 # ==================================
-# 나중에 이 부분의 공지 내용만 수정
+# 공지 내용: 나중에 이 부분만 수정
 # ==================================
 NOTICE_CONTENT = """
 📢 그룹 공지사항
@@ -35,7 +35,7 @@ def home():
     return "LINE 안내봇 실행 중!"
 
 
-# 공지 전용 웹페이지
+# 공지 전용 페이지
 @app.route("/notice", methods=["GET"])
 def notice():
     return render_template_string("""
@@ -142,7 +142,7 @@ def callback():
         source = event.get("source", {})
         group_id = source.get("groupId")
 
-        # 신규 멤버 입장
+        # 신규 멤버 입장 안내
         if event_type == "memberJoined":
             members = event.get(
                 "joined", {}
@@ -185,19 +185,7 @@ def callback():
             reply_message(reply_token, message)
             continue
 
-        # 기존 텍스트 메시지 응답
-        if event_type == "message":
-            incoming = event.get("message", {})
-
-            if incoming.get("type") != "text":
-                continue
-
-            text = incoming.get("text", "")
-
-            reply_message(
-                reply_token,
-                f"안녕하세요! 메시지를 확인했어요: {text}"
-            )
+        # 일반 메시지에는 답장하지 않음
 
     return "OK"
 
