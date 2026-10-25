@@ -1,26 +1,15 @@
 
+from flask import Flask, request, abort, render_template_string
 import os
 import requests
-from flask import Flask, request, abort, render_template_string
 
 app = Flask(__name__)
 
-LINE_CHANNEL_ACCESS_TOKEN = os.environ.get(
-    "LINE_CHANNEL_ACCESS_TOKEN", ""
-)
-
-LINE_API_HEADERS = {
-    "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
-    "Content-Type": "application/json",
-}
+LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 
 NOTICE_URL = "https://line-guide-bot.onrender.com/notice"
 
-# ==================================
-# 공지 내용: 나중에 이 부분만 수정
-# ==================================
-NOTICE_CONTENT = """
-🌿 커뮤니티 통합 가이드라인
+NOTICE_CONTENT = """🌿 커뮤니티 통합 가이드라인
 
 본 가이드라인은 쾌적하고 건강한 대화 환경을 유지하기 위해 작성되었습니다. 모든 서버 구성원은 본 규칙을 반드시 숙지해 주시기 바라며, 위반 시 조치가 취해질 수 있습니다.
 
@@ -48,78 +37,87 @@ NOTICE_CONTENT = """
 """
 
 
-@app.route("/", methods=["GET"])
+@app.route("/")
 def home():
     return "LINE 안내봇 실행 중!"
 
 
-# 공지 전용 웹페이지
-@app.route("/notice", methods=["GET"])
+@app.route("/notice")
 def notice():
-    return render_template_string("""
-    <!DOCTYPE html>
-    <html lang="ko">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport"
-              content="width=device-width, initial-scale=1">
-        <title>커뮤니티 통합 가이드라인</title>
-        <style>
-            body {
-                font-family: sans-serif;
-                max-width: 700px;
-                margin: 0 auto;
-                padding: 24px 18px;
-                line-height: 1.8;
-                background: #f7f7f7;
-                color: #222;
-            }
-            main {
-                background: white;
-                padding: 24px;
-                border-radius: 14px;
-                white-space: pre-wrap;
-                overflow-wrap: anywhere;
-            }
-            h1 {
-                font-size: 24px;
-                margin-top: 0;
-            }
-        </style>
-    </head>
-    <body>
-        <main>
-            <h1>🌿 커뮤니티 통합 가이드라인</h1>
-            {{ content }}
-        </main>
-    </body>
-    </html>
-    """, content=NOTICE_CONTENT)
+    return render_template_string(
+        """
+        <!DOCTYPE html>
+        <html lang="ko">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>커뮤니티 통합 가이드라인</title>
+            <style>
+                body {
+                    font-family: sans-serif;
+                    line-height: 1.7;
+                    max-width: 800px;
+                    margin: 30px auto;
+                    padding: 0 20px;
+                    white-space: pre-wrap;
+                    overflow-wrap: break-word;
+                }
+            </style>
+        </head>
+        <body>{{ content }}</body>
+        </html>
+        """,
+        content=NOTICE_CONTENT
+    )
 
 
 def reply_message(reply_token, text):
+    if not LINE_CHANNEL_ACCESS_TOKEN:
+        print("오류: LINE_CHANNEL_ACCESS_TOKEN 환경 변수가 설정되지 않았습니다.")
+        return
+
+    url = "https://api.line.me/v2/bot/message/reply"
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"
+    }
+
+    data = {
+        "replyToken": reply_token,
+        "messages": [
+            {
+                "type": "text",
+                "text": text
+            }
+        ]
+    }
+
     try:
         response = requests.post(
-            "https://api.line.me/v2/bot/message/reply",
-            headers=LINE_API_HEADERS,
-            json={
-                "replyToken": reply_token,
-                "messages": [
-                    {"type": "text", "text": text}
-                ],
-            },
-            timeout=10,
+            url,
+            headers=headers,
+            json=data,
+            timeout=10
         )
-        response.raise_for_status()
-        return True
+
+        if response.status_code != 200:
+            print(
+                f"LINE 답장 전송 실패: "
+                f"{response.status_code} {response.text}"
+            )
+
     except requests.RequestException as error:
-        print(f"LINE 답장 전송 실패: {error}")
-        return False
+        print(f"LINE API 요청 오류: {error}")
 
 
 def get_display_name(user_id, group_id=None):
-    if not user_id:
-        return "신규 멤버"
+    if not LINE_CHANNEL_ACCESS_TOKEN or not user_id:
+        return "새로운 멤버"
+
+    headers = {
+        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"
+    }
 
     if group_id:
         url = (
@@ -135,31 +133,33 @@ def get_display_name(user_id, group_id=None):
     try:
         response = requests.get(
             url,
-            headers=LINE_API_HEADERS,
-            timeout=10,
+            headers=headers,
+            timeout=10
         )
 
-        if response.ok:
-            return response.json().get(
-                "displayName", "신규 멤버"
-            )
+        if response.status_code == 200:
+            return response.json().get("displayName", "새로운 멤버")
 
         print(
             f"프로필 조회 실패: "
             f"{response.status_code} {response.text}"
         )
+
     except requests.RequestException as error:
         print(f"프로필 조회 오류: {error}")
 
-    return "신규 멤버"
+    return "새로운 멤버"
 
 
 @app.route("/callback", methods=["POST"])
 def callback():
-    if not LINE_CHANNEL_ACCESS_TOKEN:
-        abort(500)
+    if not request.is_json:
+        abort(400)
 
-    body = request.get_json(silent=True) or {}
+    body = request.get_json(silent=True)
+
+    if not body:
+        abort(400)
 
     for event in body.get("events", []):
         event_type = event.get("type")
@@ -171,83 +171,73 @@ def callback():
         source = event.get("source", {})
         group_id = source.get("groupId")
 
-        # 신규 멤버 입장 안내
+        # 새 멤버 입장
         if event_type == "memberJoined":
-            members = event.get(
-                "joined", {}
-            ).get("members", [])
+            members = event.get("joined", {}).get("members", [])
 
             names = [
-                get_display_name(
-                    member.get("userId"), group_id
-                )
+                get_display_name(member.get("userId"), group_id)
                 for member in members
             ]
 
-            if not names:
-                names = ["신규 멤버"]
+            if names:
+                names_text = ", ".join(names)
 
+                message = (
+                    f"🌿 {names_text}님, 환영합니다!\n\n"
+                    "입장하셨다면 아래 공지를 꼭 확인해 주세요.\n"
+                    f"{NOTICE_URL}"
+                )
+
+                reply_message(reply_token, message)
+
+        # 봇이 그룹에 초대됨
+        elif event_type == "join":
             message = (
-                f"🎉 {', '.join(names)} 님이 들어오셨습니다.\n\n"
-                "오신 걸 환영합니다! 😊\n"
-                "먼저 공지 확인 부탁드립니다.\n\n"
-                "📢 공지 확인하기:\n"
+                "안녕하세요! 🌿\n"
+                "저는 커뮤니티 안내봇입니다.\n\n"
+                "공지와 규칙은 아래 링크에서 확인해 주세요.\n"
                 f"{NOTICE_URL}\n\n"
-                "공지 확인 후 자기소개와 사진을 "
-                "업로드해 주세요."
+                "명령어: !방장 / !규칙 / !관리자 / !블랙리스트"
             )
 
             reply_message(reply_token, message)
-            continue
 
-        # 봇이 그룹에 초대된 경우
-        if event_type == "join":
-            message = (
-                "안녕하세요! 🤖 안내봇입니다.\n\n"
-                "신규 멤버 입장 시 환영 인사와 "
-                "공지 링크를 안내합니다.\n\n"
-                "📢 그룹 공지 확인하기:\n"
-                f"{NOTICE_URL}\n\n"
-                "모두 즐겁게 이용해 주세요! 😊"
-            )
+        # 명령어 응답
+        elif event_type == "message":
+            message_event = event.get("message", {})
 
-            reply_message(reply_token, message)
-            continue
-
-        # 등록된 명령어에만 응답
-        if event_type == "message":
-            incoming = event.get("message", {})
-
-            if incoming.get("type") != "text":
+            if message_event.get("type") != "text":
                 continue
 
-            text = incoming.get("text", "").strip()
+            user_message = message_event.get("text", "").strip()
 
             commands = {
                 "!방장": "럭키 165 55 10 경기어딘가",
+
                 "!규칙": (
                     "📢 공지를 확인해 주세요!\n\n"
                     "공지 확인하기:\n"
                     f"{NOTICE_URL}"
                 ),
+
                 "!관리자": (
                     "방장: 럭키\n"
-                    "부방장: 꽁칠ㄹ, 박우주"
+                    "부방장: 꽁칠ㄹ"
                 ),
-                "!블랙리스트": "블랙리스트: tjr",
+
+                "!블랙리스트": "블랙리스트: tjr"
             }
 
-            if text in commands:
+            if user_message in commands:
                 reply_message(
                     reply_token,
-                    commands[text]
+                    commands[user_message]
                 )
 
-    return "OK"
+    return "OK", 200
 
 
 if __name__ == "__main__":
-    app.run(
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000))
-    )
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
