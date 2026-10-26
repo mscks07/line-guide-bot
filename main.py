@@ -9,6 +9,11 @@ LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 
 NOTICE_URL = "https://line-guide-bot.onrender.com/notice"
 
+IMAGE_URL = (
+    "https://raw.githubusercontent.com/mscks07/line-guide-bot/"
+    "main/867569186_972749505893600_799013672998306805_n.jpg"
+)
+
 NOTICE_CONTENT = """🌿 커뮤니티 통합 가이드라인
 
 본 가이드라인은 쾌적하고 건강한 대화 환경을 유지하기 위해 작성되었습니다. 모든 서버 구성원은 본 규칙을 반드시 숙지해 주시기 바라며, 위반 시 조치가 취해질 수 있습니다.
@@ -111,6 +116,47 @@ def reply_message(reply_token, text):
         print(f"LINE API 요청 오류: {error}")
 
 
+def reply_image(reply_token):
+    if not LINE_CHANNEL_ACCESS_TOKEN:
+        print("오류: LINE_CHANNEL_ACCESS_TOKEN 환경 변수가 설정되지 않았습니다.")
+        return
+
+    url = "https://api.line.me/v2/bot/message/reply"
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"
+    }
+
+    data = {
+        "replyToken": reply_token,
+        "messages": [
+            {
+                "type": "image",
+                "originalContentUrl": IMAGE_URL,
+                "previewImageUrl": IMAGE_URL
+            }
+        ]
+    }
+
+    try:
+        response = requests.post(
+            url,
+            headers=headers,
+            json=data,
+            timeout=10
+        )
+
+        if response.status_code != 200:
+            print(
+                f"사진 전송 실패: "
+                f"{response.status_code} {response.text}"
+            )
+
+    except requests.RequestException as error:
+        print(f"사진 전송 요청 오류: {error}")
+
+
 def get_display_name(user_id, group_id=None):
     if not LINE_CHANNEL_ACCESS_TOKEN or not user_id:
         return "새로운 멤버"
@@ -198,7 +244,7 @@ def callback():
                 "저는 커뮤니티 안내봇입니다.\n\n"
                 "공지와 규칙은 아래 링크에서 확인해 주세요.\n"
                 f"{NOTICE_URL}\n\n"
-                "명령어: !방장 / !규칙 / !관리자 / !블랙리스트"
+                "명령어: !방장 / !규칙 / !관리자 / !블랙리스트 / !꽁칠ㄹ"
             )
 
             reply_message(reply_token, message)
@@ -211,6 +257,11 @@ def callback():
                 continue
 
             user_message = message_event.get("text", "").strip()
+
+            # 사진 전송 명령어
+            if user_message == "!꽁칠ㄹ":
+                reply_image(reply_token)
+                continue
 
             commands = {
                 "!방장": "럭키 165 55 10 경기어딘가",
